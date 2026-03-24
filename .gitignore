@@ -36,3 +36,20 @@ ageless-period-491209-s8-49244dd0a1f5.json
 .ageless-period-491209-s8-49244dd0a1f5.json*
 
 .deploy-tmp-indexing/
+
+.deploy-tmp-indexing
+
+.deploy-tmp-indexing*
+
+.deploy-tmp-dashboard/
+
+.deploy-tmp-dashboard
+
+.deploy-tmp-dashboard*
+
+
+dashboard/aws-lambda/dashboard-api/node_modules/
+
+.dashboard/aws-lambda/dashboard-api/node_modules/
+
+dashboard/aws-lambda/dashboard-api/node_modules/*

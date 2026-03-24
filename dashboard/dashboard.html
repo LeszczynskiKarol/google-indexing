@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Indexing Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      code,
+      .mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* Login screen */
+      .login-wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(
+          135deg,
+          #0f172a 0%,
+          #1e1b4b 50%,
+          #0f172a 100%
+        );
+      }
+      .login-box {
+        background: #fff;
+        border-radius: 20px;
+        padding: 48px;
+        max-width: 520px;
+        width: 90%;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+        text-align: center;
+      }
+      .login-box h1 {
+        font-size: 24px;
+        font-weight: 800;
+        margin: 12px 0 6px;
+      }
+      .login-box p {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 28px;
+      }
+      .login-row {
+        display: flex;
+        gap: 8px;
+      }
+      .login-row input {
+        flex: 1;
+        padding: 12px 16px;
+        border-radius: 10px;
+        border: 2px solid #e2e8f0;
+        font-size: 13px;
+        font-family: "JetBrains Mono", monospace;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .login-row input:focus {
+        border-color: #6366f1;
+      }
+      .btn-primary {
+        background: #6366f1;
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 12px 24px;
+        font-weight: 700;
+        cursor: pointer;
+        font-size: 14px;
+        white-space: nowrap;
+        transition: background 0.2s;
+      }
+      .btn-primary:hover {
+        background: #4f46e5;
+      }
+      .btn-primary:disabled {
+        background: #a5b4fc;
+        cursor: wait;
+      }
+      .btn-sm {
+        padding: 6px 14px;
+        font-size: 12px;
+        border-radius: 8px;
+      }
+      .btn-ghost {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn-ghost:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .btn-muted {
+        background: #f1f5f9;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #64748b;
+      }
+
+      /* Header */
+      .header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+        padding: 20px 32px;
+        color: #fff;
+      }
+      .header-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .header h1 {
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .header-meta {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 2px;
+      }
+
+      /* Content */
+      .content {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 32px;
+      }
+
+      /* Stat cards */
+      .stats-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+      .stat-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px 24px;
+        border: 1px solid #e2e8f0;
+        flex: 1 1 140px;
+        min-width: 140px;
+        position: relative;
+        overflow: hidden;
+      }
+      .stat-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--accent);
+      }
+      .stat-val {
+        font-size: 32px;
+        font-weight: 800;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .stat-label {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 4px;
+      }
+
+      /* Domain cards */
+      .domains-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+      .domain-card {
+        background: #fff;
+        border-radius: 14px;
+        padding: 24px;
+        border: 1px solid #e2e8f0;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      }
+      .domain-card:hover {
+        border-color: #6366f1;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+      }
+      .domain-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+      }
+      .domain-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #6366f1;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        margin-bottom: 4px;
+      }
+      .domain-name {
+        font-size: 17px;
+        font-weight: 700;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .domain-pct {
+        font-size: 24px;
+        font-weight: 800;
+        font-family: "JetBrains Mono", monospace;
+      }
+      .progress-bar {
+        display: flex;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #f1f5f9;
+        width: 100%;
+      }
+      .progress-bar span {
+        transition: width 0.5s ease;
+      }
+      .domain-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 14px;
+        font-size: 12px;
+        color: #64748b;
+        flex-wrap: wrap;
+      }
+      .domain-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid #f1f5f9;
+      }
+      .domain-footer .meta {
+        font-size: 11px;
+        color: #94a3b8;
+      }
+
+      /* Badge */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .badge-pass {
+        background: #ecfdf5;
+        color: #065f46;
+      }
+      .badge-pass .badge-dot {
+        background: #10b981;
+      }
+      .badge-fail {
+        background: #fef2f2;
+        color: #991b1b;
+      }
+      .badge-fail .badge-dot {
+        background: #ef4444;
+      }
+      .badge-neutral {
+        background: #fffbeb;
+        color: #92400e;
+      }
+      .badge-neutral .badge-dot {
+        background: #f59e0b;
+      }
+      .badge-unknown {
+        background: #f8fafc;
+        color: #64748b;
+      }
+      .badge-unknown .badge-dot {
+        background: #94a3b8;
+      }
+
+      /* URL table */
+      .url-panel {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      }
+      .url-panel-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fafbfc;
+      }
+      .url-panel-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #6366f1;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .url-panel-domain {
+        font-size: 16px;
+        font-weight: 700;
+        font-family: "JetBrains Mono", monospace;
+        margin-top: 2px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th {
+        text-align: left;
+        padding: 10px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        white-space: nowrap;
+        border-bottom: 2px solid #e2e8f0;
+      }
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      tr:nth-child(even) {
+        background: #fafbfc;
+      }
+      .url-link {
+        color: #3b82f6;
+        text-decoration: none;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+      }
+      .url-link:hover {
+        text-decoration: underline;
+      }
+      .td-meta {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+      .td-mono {
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      /* Error */
+      .error-bar {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        color: #991b1b;
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      /* Loading */
+      .loading {
+        text-align: center;
+        padding: 60px;
+        color: #94a3b8;
+      }
+
+      @media (max-width: 600px) {
+        .content {
+          padding: 16px;
+        }
+        .domains-grid {
+          grid-template-columns: 1fr;
+        }
+        .stats-row {
+          flex-direction: column;
+        }
+        .login-box {
+          padding: 32px 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script>
+      // =============================================================================
+      // Google Indexing Dashboard — Standalone vanilla JS (no React needed)
+      // =============================================================================
+
+      const API_STORAGE_KEY = "gidx_api_url";
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => document.querySelectorAll(sel);
+
+      let state = {
+        apiUrl:
+          "https://aqsazq5ae5.execute-api.eu-central-1.amazonaws.com/prod",
+        domains: [],
+        selectedDomain: null,
+        urls: [],
+        loading: false,
+        urlsLoading: false,
+        checking: null,
+        error: null,
+        lastRefresh: null,
+      };
+
+      // =============================================================================
+      // API calls
+      // =============================================================================
+
+      async function apiFetch(path, opts = {}) {
+        const res = await fetch(`${state.apiUrl}${path}`, opts);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }
+
+      async function fetchDomains() {
+        state.loading = true;
+        state.error = null;
+        render();
+        try {
+          state.domains = await apiFetch("/domains");
+          state.lastRefresh = new Date();
+        } catch (e) {
+          state.error = `Błąd połączenia: ${e.message}`;
+        }
+        state.loading = false;
+        render();
+      }
+
+      async function fetchUrls(domain) {
+        state.urlsLoading = true;
+        render();
+        try {
+          let urls = await apiFetch(`/urls?domain=${domain}`);
+          const order = {
+            FAIL: 0,
+            NEUTRAL: 1,
+            UNCHECKED: 2,
+            UNKNOWN: 3,
+            PASS: 4,
+          };
+          urls.sort(
+            (a, b) => (order[a.verdict] ?? 3) - (order[b.verdict] ?? 3),
+          );
+          state.urls = urls;
+        } catch (e) {
+          state.error = `Błąd: ${e.message}`;
+        }
+        state.urlsLoading = false;
+        render();
+      }
+
+      async function checkDomain(domain, siteUrl) {
+        state.checking = domain;
+        render();
+        try {
+          await apiFetch("/check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ domain, siteUrl }),
+          });
+          await fetchDomains();
+          if (state.selectedDomain === domain) await fetchUrls(domain);
+        } catch (e) {
+          state.error = `Błąd sprawdzania: ${e.message}`;
+        }
+        state.checking = null;
+        render();
+      }
+
+      // =============================================================================
+      // Helpers
+      // =============================================================================
+
+      function fmtDate(d) {
+        if (!d || d === "none") return "—";
+        return new Date(d).toLocaleString("pl-PL");
+      }
+      function fmtShortDate(d) {
+        if (!d || d === "none") return "—";
+        return new Date(d).toLocaleDateString("pl-PL");
+      }
+
+      function badgeHtml(verdict) {
+        const map = {
+          PASS: ["badge-pass", "Zaindeksowane"],
+          FAIL: ["badge-fail", "Niezaindeksowane"],
+          NEUTRAL: ["badge-neutral", "Neutralne"],
+          UNCHECKED: ["badge-unknown", "Niesprawdzone"],
+          UNKNOWN: ["badge-unknown", "Nieznany"],
+        };
+        const [cls, label] = map[verdict] || map.UNKNOWN;
+        return `<span class="badge ${cls}"><span class="badge-dot"></span>${label}</span>`;
+      }
+
+      function verdictLabel(v) {
+        const map = {
+          PASS: "Zaindeksowane",
+          FAIL: "Niezaindeksowane",
+          NEUTRAL: "Neutralne",
+          UNCHECKED: "Niesprawdzone",
+          UNKNOWN: "Nieznany",
+        };
+        return map[v] || v;
+      }
+
+      function pctColor(pct) {
+        if (pct === 100) return "#10b981";
+        if (pct > 50) return "#f59e0b";
+        return "#ef4444";
+      }
+
+      // =============================================================================
+      // Render
+      // =============================================================================
+
+      function render() {
+        const app = $("#app");
+
+        // Not connected
+        if (!state.apiUrl) {
+          app.innerHTML = `
+      <div class="login-wrap">
+        <div class="login-box">
+          <div style="font-size:48px;margin-bottom:12px">🔍</div>
+          <h1>Google Indexing Dashboard</h1>
+          <p>Monitoruj status indeksowania stron we wszystkich domenach</p>
+          <div class="login-row">
+            <input id="apiInput" type="text" placeholder="https://xxxxx.execute-api.eu-central-1.amazonaws.com/prod" />
+            <button class="btn-primary" onclick="connect()">Połącz</button>
+          </div>
+          <p style="font-size:11px;color:#94a3b8;margin-top:16px">API URL z deploy-dashboard.sh</p>
+        </div>
+      </div>
+    `;
+          $("#apiInput")?.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") connect();
+          });
+          return;
+        }
+
+        // Totals
+        const totalUrls = state.domains.reduce((s, d) => s + d.urlCount, 0);
+        const totalIndexed = state.domains.reduce((s, d) => s + d.indexed, 0);
+        const totalFailed = state.domains.reduce((s, d) => s + d.failed, 0);
+        const totalUnchecked = state.domains.reduce(
+          (s, d) => s + d.unchecked,
+          0,
+        );
+
+        let html = `
+    <div class="header">
+      <div class="header-inner">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:28px">🔍</span>
+          <div>
+            <h1>Google Indexing Dashboard</h1>
+            <div class="header-meta">${state.domains.length} domen · ${totalUrls} URL-i · Odświeżono: ${state.lastRefresh ? state.lastRefresh.toLocaleTimeString("pl-PL") : "—"}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" onclick="fetchDomains()">↻ Odśwież</button>
+          <button class="btn-ghost" style="color:#94a3b8;border-color:rgba(255,255,255,0.1)" onclick="disconnect()">Rozłącz</button>
+        </div>
+      </div>
+    </div>
+    <div class="content">
+  `;
+
+        // Error
+        if (state.error) {
+          html += `<div class="error-bar">${state.error} <button onclick="state.error=null;render()" style="background:none;border:none;cursor:pointer;color:#991b1b;font-weight:700">✕</button></div>`;
+        }
+
+        // Stats
+        html += `
+    <div class="stats-row">
+      <div class="stat-card" style="--accent:#6366f1"><div class="stat-val">${totalUrls}</div><div class="stat-label">Wszystkie URL-e</div></div>
+      <div class="stat-card" style="--accent:#10b981"><div class="stat-val">${totalIndexed}</div><div class="stat-label">Zaindeksowane</div></div>
+      <div class="stat-card" style="--accent:#ef4444"><div class="stat-val">${totalFailed}</div><div class="stat-label">Niezaindeksowane</div></div>
+      <div class="stat-card" style="--accent:#94a3b8"><div class="stat-val">${totalUnchecked}</div><div class="stat-label">Niesprawdzone</div></div>
+    </div>
+  `;
+
+        // Domains
+        if (state.loading) {
+          html += `<div class="loading">Ładowanie domen...</div>`;
+        } else {
+          html += `<div class="domains-grid">`;
+          for (const d of state.domains) {
+            const pct =
+              d.urlCount > 0 ? Math.round((d.indexed / d.urlCount) * 100) : 0;
+            const isChecking = state.checking === d.domain;
+            const pG = d.urlCount ? (d.indexed / d.urlCount) * 100 : 0;
+            const pY = d.urlCount ? (d.neutral / d.urlCount) * 100 : 0;
+            const pR = d.urlCount ? (d.failed / d.urlCount) * 100 : 0;
+            const pGr = d.urlCount ? (d.unchecked / d.urlCount) * 100 : 0;
+
+            html += `
+        <div class="domain-card" onclick="selectDomain('${d.domain}')">
+          <div class="domain-top">
+            <div>
+              <div class="domain-label">Domena</div>
+              <div class="domain-name">${d.domain}</div>
+            </div>
+            <div class="domain-pct" style="color:${pctColor(pct)}">${pct}%</div>
+          </div>
+          <div class="progress-bar">
+            <span style="width:${pG}%;background:#10b981"></span>
+            <span style="width:${pY}%;background:#f59e0b"></span>
+            <span style="width:${pR}%;background:#ef4444"></span>
+            <span style="width:${pGr}%;background:#cbd5e1"></span>
+          </div>
+          <div class="domain-stats">
+            <span><strong style="color:#10b981">${d.indexed}</strong> zaindeks.</span>
+            <span><strong style="color:#ef4444">${d.failed}</strong> brak</span>
+            <span><strong style="color:#94a3b8">${d.unchecked}</strong> niesprawdz.</span>
+            <span class="mono" style="margin-left:auto">${d.urlCount} URL</span>
+          </div>
+          <div class="domain-footer">
+            <span class="meta">Sprawdzono: ${d.lastChecked ? fmtDate(d.lastChecked) : "nigdy"}</span>
+            <button class="btn-primary btn-sm" onclick="event.stopPropagation();checkDomain('${d.domain}','${d.siteUrl}')" ${isChecking ? "disabled" : ""}>
+              ${isChecking ? "Sprawdzam..." : "Sprawdź teraz"}
+            </button>
+          </div>
+        </div>
+      `;
+          }
+          html += `</div>`;
+        }
+
+        // URL detail panel
+        if (state.selectedDomain) {
+          html += `
+      <div class="url-panel">
+        <div class="url-panel-header">
+          <div>
+            <div class="url-panel-label">Szczegóły domeny</div>
+            <div class="url-panel-domain">${state.selectedDomain}</div>
+          </div>
+          <button class="btn-muted" onclick="state.selectedDomain=null;state.urls=[];render()">✕ Zamknij</button>
+        </div>
+    `;
+
+          if (state.urlsLoading) {
+            html += `<div class="loading">Ładowanie URL-i...</div>`;
+          } else if (state.urls.length === 0) {
+            html += `<div class="loading">Brak danych</div>`;
+          } else {
+            html += `
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr>
+              <th>URL</th><th>Status</th><th>Stan pokrycia</th><th>Zgłoszono</th><th>Zmiana statusu</th><th>Ostatni crawl</th><th>Sprawdzono</th>
+            </tr></thead>
+            <tbody>
+      `;
+            state.urls.forEach((u, i) => {
+              const path = u.url.replace(/^https?:\/\/[^/]+/, "");
+              const statusChangeInfo = u.statusChangedAt
+                ? `<span style="color:#0f172a">${fmtShortDate(u.statusChangedAt)}</span>` +
+                  (u.previousVerdict
+                    ? `<br><span style="font-size:10px;color:#94a3b8">z: ${verdictLabel(u.previousVerdict)}</span>`
+                    : "")
+                : "—";
+              html += `
+          <tr>
+            <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              <a href="${u.url}" target="_blank" class="url-link">${path}</a>
+            </td>
+            <td>${badgeHtml(u.verdict)}</td>
+            <td class="td-meta">${u.coverageState || "—"}</td>
+            <td class="td-meta td-mono">${fmtShortDate(u.firstSubmitted)}</td>
+            <td class="td-meta">${statusChangeInfo}</td>
+            <td class="td-meta td-mono">${fmtShortDate(u.lastCrawlTime)}</td>
+            <td class="td-meta">${u.lastChecked ? fmtDate(u.lastChecked) : "—"}</td>
+          </tr>
+        `;
+            });
+            html += `</tbody></table></div>`;
+          }
+          html += `</div>`;
+        }
+
+        html += `</div>`; // .content
+        app.innerHTML = html;
+      }
+
+      // =============================================================================
+      // Actions (global, called from onclick)
+      // =============================================================================
+
+      function connect() {
+        const input = $("#apiInput");
+        if (!input) return;
+        const url = input.value.trim().replace(/\/$/, "");
+        if (!url) return;
+        state.apiUrl = url;
+        localStorage.setItem(API_STORAGE_KEY, url);
+        render();
+        fetchDomains();
+      }
+
+      function disconnect() {
+        state.apiUrl = "";
+        state.domains = [];
+        state.selectedDomain = null;
+        state.urls = [];
+        localStorage.removeItem(API_STORAGE_KEY);
+        render();
+      }
+
+      function selectDomain(domain) {
+        state.selectedDomain = domain;
+        state.urls = [];
+        render();
+        fetchUrls(domain);
+      }
+
+      // Initial render
+      render();
+      // Auto-connect if URL saved
+      if (state.apiUrl) fetchDomains();
+    </script>
+  </body>
+</html>

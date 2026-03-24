@@ -1,9 +1,6 @@
 // =============================================================================
-// Google Indexing Dashboard API Lambda v2
-//
-// POST /check triggers ASYNC self-invocation → returns instantly.
-// Background worker processes all URLs with 120s Lambda timeout.
-// Dashboard polls GET /urls to see progress updating in real-time.
+// Google Indexing Dashboard API Lambda v3
+// Tracks: firstSubmitted (from notifier), statusChangedAt, previousVerdict
 // =============================================================================
 
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
@@ -155,30 +152,78 @@ async function getUrlStatuses(domain) {
     indexingState: item.indexingState?.S || "UNKNOWN",
     pageFetchState: item.pageFetchState?.S || "UNKNOWN",
     robotsTxtState: item.robotsTxtState?.S || "UNKNOWN",
+    // New tracking fields
+    firstSubmitted: item.firstSubmitted?.S || null,
+    lastSubmitted: item.lastSubmitted?.S || null,
+    statusChangedAt: item.statusChangedAt?.S || null,
+    previousVerdict: item.previousVerdict?.S || null,
   }));
 }
 
+async function getExistingStatus(domain, url) {
+  try {
+    const res = await dynamodb.send(
+      new GetItemCommand({
+        TableName: STATUS_TABLE,
+        Key: { domain: { S: domain }, url: { S: url } },
+      }),
+    );
+    if (!res.Item) return null;
+    return {
+      verdict: res.Item.verdict?.S || null,
+      firstSubmitted: res.Item.firstSubmitted?.S || null,
+      lastSubmitted: res.Item.lastSubmitted?.S || null,
+      statusChangedAt: res.Item.statusChangedAt?.S || null,
+      previousVerdict: res.Item.previousVerdict?.S || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function saveUrlStatus(domain, url, inspection) {
+  const now = new Date().toISOString();
+  const existing = await getExistingStatus(domain, url);
+
+  const item = {
+    domain: { S: domain },
+    url: { S: url },
+    verdict: { S: inspection.verdict },
+    coverageState: { S: inspection.coverageState },
+    lastCrawlTime: { S: inspection.lastCrawlTime || "none" },
+    lastChecked: { S: now },
+    indexingState: { S: inspection.indexingState },
+    pageFetchState: { S: inspection.pageFetchState },
+    robotsTxtState: { S: inspection.robotsTxtState },
+  };
+
+  // Preserve firstSubmitted and lastSubmitted from notifier
+  if (existing?.firstSubmitted) {
+    item.firstSubmitted = { S: existing.firstSubmitted };
+  }
+  if (existing?.lastSubmitted) {
+    item.lastSubmitted = { S: existing.lastSubmitted };
+  }
+
+  // Track status changes
+  if (existing && existing.verdict && existing.verdict !== inspection.verdict) {
+    item.statusChangedAt = { S: now };
+    item.previousVerdict = { S: existing.verdict };
+  } else if (existing?.statusChangedAt) {
+    // Preserve previous change info
+    item.statusChangedAt = { S: existing.statusChangedAt };
+    if (existing.previousVerdict) {
+      item.previousVerdict = { S: existing.previousVerdict };
+    }
+  }
+
   await dynamodb.send(
-    new PutItemCommand({
-      TableName: STATUS_TABLE,
-      Item: {
-        domain: { S: domain },
-        url: { S: url },
-        verdict: { S: inspection.verdict },
-        coverageState: { S: inspection.coverageState },
-        lastCrawlTime: { S: inspection.lastCrawlTime || "none" },
-        lastChecked: { S: new Date().toISOString() },
-        indexingState: { S: inspection.indexingState },
-        pageFetchState: { S: inspection.pageFetchState },
-        robotsTxtState: { S: inspection.robotsTxtState },
-      },
-    }),
+    new PutItemCommand({ TableName: STATUS_TABLE, Item: item }),
   );
 }
 
 // =============================================================================
-// Route Handlers (fast, for API Gateway)
+// Route Handlers
 // =============================================================================
 
 async function handleGetDomains() {
@@ -232,12 +277,17 @@ async function handleGetUrls(domain) {
       lastChecked: status?.lastChecked || null,
       indexingState: status?.indexingState || "UNKNOWN",
       pageFetchState: status?.pageFetchState || "UNKNOWN",
+      // New fields
+      firstSubmitted: status?.firstSubmitted || null,
+      lastSubmitted: status?.lastSubmitted || null,
+      statusChangedAt: status?.statusChangedAt || null,
+      previousVerdict: status?.previousVerdict || null,
     };
   });
 }
 
 // =============================================================================
-// Background worker — runs async, no API Gateway timeout
+// Background worker
 // =============================================================================
 
 async function backgroundCheck(domain) {
@@ -245,7 +295,6 @@ async function backgroundCheck(domain) {
   const token = await getAccessToken();
   const inspectionSiteUrl = toScDomain(domain);
 
-  // Get all URLs
   const tracker = await dynamodb.send(
     new GetItemCommand({
       TableName: TRACKER_TABLE,
@@ -255,20 +304,15 @@ async function backgroundCheck(domain) {
   const allUrls = (tracker.Item?.urls?.SS || []).filter(
     (u) => u !== "__empty__",
   );
-
-  // Get existing statuses
   const statuses = await getUrlStatuses(domain);
   const statusMap = new Map(statuses.map((s) => [s.url, s]));
 
-  // Only check unchecked + failed
   const toCheck = allUrls.filter((url) => {
     const s = statusMap.get(url);
     return !s || s.verdict !== "PASS";
   });
 
-  console.log(
-    `[BG] ${toCheck.length} URLs to check out of ${allUrls.length} total`,
-  );
+  console.log(`[BG] ${toCheck.length} URLs to check out of ${allUrls.length}`);
 
   let checked = 0;
   let errors = 0;
@@ -281,9 +325,7 @@ async function backgroundCheck(domain) {
         console.log(`[BG] ${url} → ${inspection.verdict}`);
         checked++;
       } else {
-        console.error(
-          `[BG] ${url} → ERROR ${inspection.status}: ${inspection.message}`,
-        );
+        console.error(`[BG] ${url} → ERROR ${inspection.status}`);
         errors++;
       }
     } catch (err) {
@@ -300,13 +342,11 @@ async function backgroundCheck(domain) {
 // =============================================================================
 
 export const handler = async (event) => {
-  // ── Background worker (async self-invocation) ──
   if (event._background) {
     await backgroundCheck(event._background.domain);
     return { ok: true };
   }
 
-  // ── EventBridge scheduled event ──
   if (event.source === "aws.events" || event["detail-type"]) {
     console.log("Scheduled check triggered");
     const domains = await getAllDomains();
@@ -318,12 +358,10 @@ export const handler = async (event) => {
           Payload: JSON.stringify({ _background: { domain: d.domain } }),
         }),
       );
-      console.log(`Triggered background check for ${d.domain}`);
     }
     return { statusCode: 200, body: { triggered: domains.length } };
   }
 
-  // ── API Gateway ──
   const routeKey = event.routeKey || event.requestContext?.routeKey || "";
   const qs = event.queryStringParameters || {};
   const headers = {
@@ -354,8 +392,6 @@ export const handler = async (event) => {
           headers,
           body: JSON.stringify({ error: "domain required" }),
         };
-
-      // Fire-and-forget: async Lambda invocation
       await lambdaClient.send(
         new InvokeCommand({
           FunctionName: FUNCTION_NAME,
@@ -363,7 +399,6 @@ export const handler = async (event) => {
           Payload: JSON.stringify({ _background: { domain: payload.domain } }),
         }),
       );
-
       body = {
         status: "started",
         domain: payload.domain,

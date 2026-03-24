@@ -1,6 +1,7 @@
 // =============================================================================
-// Google Indexing Notifier Lambda
-// Fetches sitemap, diffs with previous version, notifies Google of changes
+// Google Indexing Notifier Lambda v2
+// Fetches sitemap, diffs with previous version, notifies Google of changes,
+// and records submission dates in indexing-url-status table.
 // =============================================================================
 
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
@@ -8,10 +9,12 @@ import {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 
 const REGION = process.env.AWS_REGION || "eu-central-1";
 const DYNAMODB_TABLE = process.env.DYNAMODB_TABLE || "sitemap-url-tracker";
+const STATUS_TABLE = process.env.STATUS_TABLE || "indexing-url-status";
 const SSM_PARAM_NAME =
   process.env.SSM_PARAM_NAME || "/google-indexing/service-account-key";
 const SCOPES = [
@@ -40,7 +43,7 @@ async function createJwt(serviceAccount) {
       aud: "https://oauth2.googleapis.com/token",
       iat: now,
       exp: now + 3600,
-    })
+    }),
   );
 
   const signInput = `${header}.${payload}`;
@@ -83,7 +86,7 @@ async function notifyUrl(accessToken, url, type = "URL_UPDATED") {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ url, type }),
-    }
+    },
   );
 
   const data = await res.json();
@@ -115,14 +118,12 @@ async function submitSitemap(accessToken, siteUrl, sitemapUrl) {
 // -----------------------------------------------------------------------------
 
 async function fetchSitemapUrls(siteUrl) {
-  // Fetch sitemap index first
   const indexUrl = `${siteUrl}/sitemap-index.xml`;
   const indexRes = await fetch(indexUrl);
   const indexXml = await indexRes.text();
 
-  // Extract child sitemap URLs
   const sitemapLocs = [...indexXml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
-    (m) => m[1]
+    (m) => m[1],
   );
 
   const allUrls = [];
@@ -146,7 +147,7 @@ async function getPreviousUrls(domain) {
     new GetItemCommand({
       TableName: DYNAMODB_TABLE,
       Key: { domain: { S: domain } },
-    })
+    }),
   );
 
   if (!res.Item || !res.Item.urls) return [];
@@ -163,8 +164,36 @@ async function storeCurrentUrls(domain, urls) {
         lastUpdated: { S: new Date().toISOString() },
         urlCount: { N: String(urls.length) },
       },
-    })
+    }),
   );
+}
+
+// -----------------------------------------------------------------------------
+// Record submission date — only sets firstSubmitted if not already set
+// -----------------------------------------------------------------------------
+
+async function recordSubmission(domain, url, type) {
+  const now = new Date().toISOString();
+  try {
+    // Use UpdateItem with condition to only set firstSubmitted if it doesn't exist
+    await dynamodb.send(
+      new UpdateItemCommand({
+        TableName: STATUS_TABLE,
+        Key: {
+          domain: { S: domain },
+          url: { S: url },
+        },
+        UpdateExpression:
+          "SET firstSubmitted = if_not_exists(firstSubmitted, :now), lastSubmitted = :now, submissionType = :type",
+        ExpressionAttributeValues: {
+          ":now": { S: now },
+          ":type": { S: type },
+        },
+      }),
+    );
+  } catch (err) {
+    console.error(`Failed to record submission for ${url}: ${err.message}`);
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -186,7 +215,7 @@ export const handler = async (event) => {
   const domain = new URL(siteUrl).hostname;
   const sitemapIndexUrl = `${siteUrl}/sitemap-index.xml`;
 
-  console.log(`=== Google Indexing Notifier ===`);
+  console.log(`=== Google Indexing Notifier v2 ===`);
   console.log(`Site: ${siteUrl}`);
   console.log(`Domain: ${domain}`);
 
@@ -203,7 +232,7 @@ export const handler = async (event) => {
   };
 
   try {
-    // 1. Ping sitemap (always, no auth needed)
+    // 1. Ping sitemap
     console.log("\n[1] Pinging sitemap...");
     results.sitemapPing = await pingSitemap(sitemapIndexUrl);
     console.log(`Ping status: ${results.sitemapPing.status}`);
@@ -226,10 +255,9 @@ export const handler = async (event) => {
     results.newUrls = newUrls;
     results.removedUrls = removedUrls;
 
-    console.log(`\n[4] Diff: +${newUrls.length} new, -${removedUrls.length} removed`);
-
-    if (newUrls.length > 0) console.log("New URLs:", newUrls);
-    if (removedUrls.length > 0) console.log("Removed URLs:", removedUrls);
+    console.log(
+      `\n[4] Diff: +${newUrls.length} new, -${removedUrls.length} removed`,
+    );
 
     // 5. If there are changes, use Google APIs
     if (newUrls.length > 0 || removedUrls.length > 0) {
@@ -238,7 +266,7 @@ export const handler = async (event) => {
         new GetParameterCommand({
           Name: SSM_PARAM_NAME,
           WithDecryption: true,
-        })
+        }),
       );
       const serviceAccount = JSON.parse(ssmRes.Parameter.Value);
       const accessToken = await getAccessToken(serviceAccount);
@@ -249,18 +277,23 @@ export const handler = async (event) => {
       results.sitemapSubmit = await submitSitemap(
         accessToken,
         siteUrl,
-        sitemapIndexUrl
+        sitemapIndexUrl,
       );
       console.log(`Sitemap submit status: ${results.sitemapSubmit.status}`);
 
-      // Notify new URLs (URL_UPDATED)
+      // Notify new URLs (URL_UPDATED) + record submission
       console.log(`\n[7] Notifying ${newUrls.length} new URLs...`);
       for (const url of newUrls) {
         try {
           const result = await notifyUrl(accessToken, url, "URL_UPDATED");
           results.indexingResults.push(result);
+
+          // Record submission date
+          if (result.status === 200) {
+            await recordSubmission(domain, url, "URL_UPDATED");
+          }
+
           console.log(`  ✅ ${url} → ${result.status}`);
-          // Rate limit: max 200/day, be gentle
           if (newUrls.length > 10) await sleep(200);
         } catch (err) {
           const errMsg = `Failed to notify ${url}: ${err.message}`;
@@ -275,6 +308,11 @@ export const handler = async (event) => {
         try {
           const result = await notifyUrl(accessToken, url, "URL_DELETED");
           results.indexingResults.push(result);
+
+          if (result.status === 200) {
+            await recordSubmission(domain, url, "URL_DELETED");
+          }
+
           console.log(`  ✅ ${url} → ${result.status} (deleted)`);
         } catch (err) {
           const errMsg = `Failed to notify removal ${url}: ${err.message}`;
@@ -285,20 +323,20 @@ export const handler = async (event) => {
     } else {
       console.log("\n[5-8] No changes detected, skipping Google API calls");
 
-      // Still submit sitemap via Search Console on every deploy
+      // Still submit sitemap
       console.log("Submitting sitemap anyway...");
       const ssmRes = await ssm.send(
         new GetParameterCommand({
           Name: SSM_PARAM_NAME,
           WithDecryption: true,
-        })
+        }),
       );
       const serviceAccount = JSON.parse(ssmRes.Parameter.Value);
       const accessToken = await getAccessToken(serviceAccount);
       results.sitemapSubmit = await submitSitemap(
         accessToken,
         siteUrl,
-        sitemapIndexUrl
+        sitemapIndexUrl,
       );
       console.log(`Sitemap submit status: ${results.sitemapSubmit.status}`);
     }
